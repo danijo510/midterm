@@ -1,0 +1,116 @@
+---
+title: "Midterm"
+author: "djones47"
+date: "3/29/2020"
+output: html_document
+---
+
+```{r}
+require(tidyverse, quietly = TRUE)
+library(lubridate)
+```
+
+###Question 1
+
+```{r}
+#reading in the data 
+ozone91 <- suppressMessages(read_csv("1991_ozone.csv", col_names = TRUE, na = c("NA", "n/p", "n/a"), guess_max = 30000))
+ozone98 <- suppressMessages(read_csv("1998_ozone.csv", col_names = TRUE, na = c("NA", "n/p", "n/a"), guess_max = 30000))
+ozone08 <- suppressMessages(read_csv("2008_ozone.csv", col_names = TRUE, na = c("NA", "n/p", "n/a"), guess_max = 30000))
+ozone18 <- suppressMessages(read_csv("2018_ozone.csv", col_names = TRUE, na = c("NA", "n/p", "n/a"), guess_max = 30000))
+
+#combining into one giant dataset
+ozonedata <- rbind(ozone91, ozone98, ozone08, ozone18)
+```
+
+```{r}
+#Creating columns that mark 1 if the concentration exceeds the standard
+ozonedata$exceed08 <- ifelse(ozonedata$`Daily Max 8-hour Ozone Concentration` >0.075,1,0)
+ozonedata$exceed15 <- ifelse(ozonedata$`Daily Max 8-hour Ozone Concentration` >0.07,1,0)
+```
+
+```{r}
+#Using a GLM to analyze my binary data
+ex08 <- glm(exceed08 ~ date2, family = binomial(link = "logit"), data = ozonedata)
+ggplot(ex08, aes(x=date2, y = exceed08))+
+  geom_point()+
+  stat_smooth(method = "glm", method.args = list(family = "binomial"))+
+  labs(title = "Binomial distribution of days that exceed the 2008 8-hour standard", x = "Date", y = "Exceeded or not")
+```
+```{r}
+summary(ex08)
+
+```
+
+
+```{r}
+ex15 <- glm(exceed15 ~ date2, family = binomial(link = "logit"), data = ozonedata)
+ggplot(ex15, aes(x=date2, y = exceed15))+
+  geom_point()+
+  stat_smooth(method = "glm", method.args = list(family = "binomial"))+
+  labs(title = "Binomial distribution of days that exceed the 2015 8-hour standard", x = "Date", y = "Exceeded or not")
+```
+
+```{r}
+summary(ex15)
+```
+
+```{r}
+#Looking at the confidence intervals and odds ratio for both models 
+exp(cbind(OR = coef(ex08), OR = coef(ex15), confint(ex08), confint(ex15)))
+```
+
+One thing that can be seen from both plots is that the number of days where the concentration does not exceed the standard is more than the number of days where the concentration exceeds the standard. When looking at the odds ratio for both of the models, they are very close to each other. Additionally, the confidence intervals for both models are fairly close together. This leads me to believe there is not a signficant difference between the number of days where the concentration of ozone exceed the 2008 standard and number of days where the concentration exceeded the 2015 standard. 
+
+
+
+
+
+
+###Question 2
+
+```{r}
+
+#converting date column from a character column to a date column
+ozonedata$date2 <- mdy(ozonedata$Date)
+
+#changing it to year for my ranking
+ozonedata$year <- as.factor(year(ozonedata$date2)) #Changed to factor for use in tukey test
+
+#ranking the concentrations
+ozonedata$rank <- rank(ozonedata$`Daily Max 8-hour Ozone Concentration`, ties.method = "average", na.last = NA)
+
+#check to see my data are ranked
+ggplot(ozonedata, aes(x = rank, y = rank)) + geom_point()
+```
+
+```{r}
+#Performing the anova on the rank
+rank.aov <- aov(rank ~ year , data = ozonedata)
+
+#Making a boxplot to visualize
+ggplot(ozonedata, aes(x = ozonedata$year, y = ozonedata$`Daily Max 8-hour Ozone Concentration`, group = ozonedata$year ))+
+  geom_boxplot()+
+  theme_bw()+
+  xlab("Year")+
+  ylab("Daily Max 8-hour Ozone Concentration (ppm)")+
+  geom_hline(yintercept = 0.075, color = "blue")+
+  geom_hline(yintercept = 0.070, color = "red")
+```
+
+```{r}
+#checking to see what the F and P value are
+summary.aov(rank.aov)
+```
+
+```{r}
+#Performing a tukey's test
+tukey.test <- TukeyHSD(rank.aov)
+tukey.test
+```
+
+```{r}
+plot(tukey.test)
+```
+
+To determine the difference in ozone concentration between the years, I administered a ranked anova test because there were different observed variables in each differerent year. When looking at the F and P values of the anova test, the F ratio is high while the P value is low. This suggests that the variation in concentration in a single year is lower than the variation in concentration between the different years. On the above boxplot, the blue line represents the 2008 standard of 0.075 ppm while the red line represents the 0.070 ppm standard of 2015. Using the Tukey test, the years that show signifcant difference are between 1998 and 1991, 2018 and 1998, and 2018 and 2008. Between 1991 and 1998. the EPA instituted the 1997 8-Hour Ozone Standards which was set at 0.08 ppm, however, there was an increase in the mean Ozone concentration between 1991 and 1998 and this increase was significant. This could be because of increase in technology that contributed to additional ozone in the air. The concentration in 2018 was significantly lower than both 1998 and 2008, likely due to the updated standard of 0.70 ppm, as well as increase of information about how air quality affects people. 
